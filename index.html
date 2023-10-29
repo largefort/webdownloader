@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Website Downloader</title>
+</head>
+<body>
+    <h1>Website Downloader</h1>
+    <p>Enter the URL of the website you want to download:</p>
+    <input type="text" id="url" placeholder="http://example.com" style="width: 80%">
+    
+    <p>Select download options:</p>
+    <label for="html">HTML</label>
+    <input type="checkbox" id="html" checked>
+    <label for="css">CSS</label>
+    <input type="checkbox" id="css" checked>
+    <label for="images">Images</label>
+    <input type="checkbox" id="images" checked>
+    
+    <p>Download depth (0 for the current page only):</p>
+    <input type="number" id="depth" value="1">
+    
+    <button onclick="downloadWebsite()">Download</button>
+
+    <script>
+        function downloadWebsite() {
+            var url = document.getElementById('url').value;
+            var downloadOptions = {
+                html: document.getElementById('html').checked,
+                css: document.getElementById('css').checked,
+                images: document.getElementById('images').checked,
+                depth: parseInt(document.getElementById('depth').value),
+            };
+
+            if (url === "") {
+                alert("Please enter a URL.");
+                return;
+            }
+
+            // Create a ZIP file for the downloaded content
+            var zip = new JSZip();
+
+            // Function to download a URL and its resources
+            function downloadPage(currentUrl, currentDepth) {
+                if (currentDepth <= downloadOptions.depth) {
+                    fetch(currentUrl)
+                        .then(response => response.text())
+                        .then(html => {
+                            // Save HTML content to the ZIP file
+                            if (downloadOptions.html) {
+                                zip.file(currentUrl.replace(/[^a-z0-9]/gi, '_') + ".html", html);
+                            }
+
+                            var parser = new DOMParser();
+                            var doc = parser.parseFromString(html, 'text/html');
+
+                            // Download CSS files
+                            if (downloadOptions.css) {
+                                var cssLinks = doc.querySelectorAll('link[rel="stylesheet"]');
+                                cssLinks.forEach(link => {
+                                    var cssUrl = link.getAttribute('href');
+                                    if (cssUrl) {
+                                        fetch(new URL(cssUrl, currentUrl))
+                                            .then(response => response.text())
+                                            .then(cssContent => {
+                                                zip.file(cssUrl.replace(/[^a-z0-9]/gi, '_') + ".css", cssContent);
+                                            });
+                                    }
+                                });
+                            }
+
+                            // Download images
+                            if (downloadOptions.images) {
+                                var imgTags = doc.querySelectorAll('img');
+                                imgTags.forEach(img => {
+                                    var imgUrl = img.getAttribute('src');
+                                    if (imgUrl) {
+                                        fetch(new URL(imgUrl, currentUrl))
+                                            .then(response => response.blob())
+                                            .then(blob => {
+                                                zip.file(imgUrl.replace(/[^a-z0-9]/gi, '_'), blob);
+                                            });
+                                    }
+                                });
+                            }
+
+                            // Follow links on the page
+                            if (currentDepth < downloadOptions.depth) {
+                                var linkTags = doc.querySelectorAll('a');
+                                linkTags.forEach(link => {
+                                    var nextUrl = new URL(link.getAttribute('href'), currentUrl).href;
+                                    downloadPage(nextUrl, currentDepth + 1);
+                                });
+                            }
+                        })
+                        .catch(error => console.error(error));
+                }
+            }
+
+            downloadPage(url, 0);
+
+            // Create the ZIP file when all downloads are complete
+            setTimeout(() => {
+                zip.generateAsync({ type: "blob" })
+                    .then(function (content) {
+                        saveAs(content, "downloaded-website.zip");
+                    });
+            }, 5000); // Adjust the delay as needed for your use case
+        }
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.3.0/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+</body>
+</html>
